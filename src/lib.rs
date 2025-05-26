@@ -1,6 +1,4 @@
-extern crate duckdb;
-extern crate duckdb_loadable_macros;
-extern crate libduckdb_sys;
+use std::error::Error;
 
 use duckdb::core::Inserter;
 use duckdb::ffi;
@@ -12,15 +10,11 @@ use duckdb::{
     Connection, Result,
 };
 use duckdb_loadable_macros::duckdb_entrypoint_c_api;
-use std::error::Error;
-
 use geo_traits::to_geo::ToGeoGeometry;
 use geo_types::Geometry;
 use hilbert_geometry::HilbertSerializer;
 use std::cell::LazyCell;
 use wkb;
-
-struct HilbertGeometryEncodeFunc;
 
 const SERIALIZER: LazyCell<HilbertSerializer> = LazyCell::new(|| HilbertSerializer::new());
 
@@ -33,6 +27,7 @@ fn duckdb_string_bytes(word: &duckdb_string_t) -> &[u8] {
     }
 }
 
+struct HilbertGeometryEncodeFunc;
 impl VScalar for HilbertGeometryEncodeFunc {
     type State = ();
 
@@ -72,15 +67,9 @@ impl VScalar for HilbertGeometryEncodeFunc {
 }
 
 struct HilbertGeometryDecodeFunc;
-
 impl VScalar for HilbertGeometryDecodeFunc {
     type State = ();
 
-    /// # Safety
-    /// This function is called by DuckDB when executing the UDF (user-defined function).
-    /// - `input` must be a valid and initialized DataChunkHandle.
-    /// - `output` must be a valid and writable WritableVector.
-    /// - Caller (DuckDB) must guarantee input and output are valid for the duration of the call.
     unsafe fn invoke(
         _state: &(),
         input: &mut DataChunkHandle,
