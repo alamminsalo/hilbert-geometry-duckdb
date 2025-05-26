@@ -1,5 +1,5 @@
 [package]
-name = "rusty_quack"
+name = "hilbert_geometry"
 version = "0.1.0"
 edition = "2021"
 
@@ -15,11 +15,16 @@ strip = true
 # src/wasm_lib.rs forwards to src/lib.rs so that we can change from cdylib
 # (that is needed while compiling natively) to staticlib (needed since the
 # actual linking will be done via emcc
-name = "rusty_quack"
+name = "hilbert_geometry"
 path = "src/wasm_lib.rs"
 crate-type = ["staticlib"]
 
 [dependencies]
-duckdb = { version = "1.2.2", features = ["vtab-loadable"] }
+duckdb = { version = "1.2.2", features = ["vtab-loadable", "vscalar", "vtab-arrow"] }
 duckdb-loadable-macros = "0.1.5"
+geo-traits = "0.3.0"
+geo-types = "0.7.16"
+hilbert-geometry = "0.1.1"
 libduckdb-sys = { version = "1.2.2", features = ["loadable-extension"] }
+once_cell = "1.21.3"
+wkb = "0.9.0"

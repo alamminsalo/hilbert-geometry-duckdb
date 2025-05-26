@@ -2,71 +2,133 @@ extern crate duckdb;
 extern crate duckdb_loadable_macros;
 extern crate libduckdb_sys;
 
+use duckdb::core::Inserter;
+use duckdb::ffi;
+use duckdb::ffi::{duckdb_string_t, duckdb_string_t_data, duckdb_string_t_length};
 use duckdb::{
-    core::{DataChunkHandle, Inserter, LogicalTypeHandle, LogicalTypeId},
-    vtab::{BindInfo, InitInfo, TableFunctionInfo, VTab},
+    core::{DataChunkHandle, LogicalTypeId},
+    vscalar::{ScalarFunctionSignature, VScalar},
+    vtab::arrow::WritableVector,
     Connection, Result,
 };
 use duckdb_loadable_macros::duckdb_entrypoint_c_api;
-use libduckdb_sys as ffi;
-use std::{
-    error::Error,
-    ffi::CString,
-    sync::atomic::{AtomicBool, Ordering},
-};
+use std::error::Error;
 
-#[repr(C)]
-struct HelloBindData {
-    name: String,
+use geo_traits::to_geo::ToGeoGeometry;
+use geo_types::Geometry;
+use hilbert_geometry::HilbertSerializer;
+use std::cell::LazyCell;
+use wkb;
+
+struct HilbertGeometryEncodeFunc;
+
+const SERIALIZER: LazyCell<HilbertSerializer> = LazyCell::new(|| HilbertSerializer::new());
+
+fn duckdb_string_bytes(word: &duckdb_string_t) -> &[u8] {
+    unsafe {
+        let len = duckdb_string_t_length(*word);
+        let c_ptr = duckdb_string_t_data(word as *const _ as *mut _);
+        let bytes = std::slice::from_raw_parts(c_ptr as *const u8, len as usize);
+        bytes
+    }
 }
 
-#[repr(C)]
-struct HelloInitData {
-    done: AtomicBool,
-}
+impl VScalar for HilbertGeometryEncodeFunc {
+    type State = ();
 
-struct HelloVTab;
+    unsafe fn invoke(
+        _state: &(),
+        input: &mut DataChunkHandle,
+        output: &mut dyn WritableVector,
+    ) -> Result<(), Box<dyn Error>> {
+        for i in 0..input.len() {
+            let input_vec = input.flat_vector(i);
 
-impl VTab for HelloVTab {
-    type InitData = HelloInitData;
-    type BindData = HelloBindData;
+            // read input WKB blob
+            if let Some(blob) = input_vec
+                .as_slice_with_len::<duckdb_string_t>(input.len())
+                .first()
+            {
+                // encode hilbert geom
+                let wkb = duckdb_string_bytes(blob);
+                let geom: Geometry<f64> = wkb::reader::read_wkb(wkb)?.to_geometry();
+                let buf = (*SERIALIZER).encode(&geom)?;
 
-    fn bind(bind: &BindInfo) -> Result<Self::BindData, Box<dyn std::error::Error>> {
-        bind.add_result_column("column0", LogicalTypeHandle::from(LogicalTypeId::Varchar));
-        let name = bind.get_parameter(0).to_string();
-        Ok(HelloBindData { name })
-    }
-
-    fn init(_: &InitInfo) -> Result<Self::InitData, Box<dyn std::error::Error>> {
-        Ok(HelloInitData {
-            done: AtomicBool::new(false),
-        })
-    }
-
-    fn func(func: &TableFunctionInfo<Self>, output: &mut DataChunkHandle) -> Result<(), Box<dyn std::error::Error>> {
-        let init_data = func.get_init_data();
-        let bind_data = func.get_bind_data();
-        if init_data.done.swap(true, Ordering::Relaxed) {
-            output.set_len(0);
-        } else {
-            let vector = output.flat_vector(0);
-            let result = CString::new(format!("Rusty Quack {} 🐥", bind_data.name))?;
-            vector.insert(0, result);
-            output.set_len(1);
+                // write buf to output
+                let output_vector = output.flat_vector();
+                output_vector.insert(0, buf.as_slice());
+            }
         }
+
         Ok(())
     }
 
-    fn parameters() -> Option<Vec<LogicalTypeHandle>> {
-        Some(vec![LogicalTypeHandle::from(LogicalTypeId::Varchar)])
+    fn signatures() -> Vec<ScalarFunctionSignature> {
+        vec![ScalarFunctionSignature::exact(
+            vec![LogicalTypeId::Blob.into()],
+            LogicalTypeId::Blob.into(),
+        )]
     }
 }
 
-const EXTENSION_NAME: &str = env!("CARGO_PKG_NAME");
+struct HilbertGeometryDecodeFunc;
+
+impl VScalar for HilbertGeometryDecodeFunc {
+    type State = ();
+
+    /// # Safety
+    /// This function is called by DuckDB when executing the UDF (user-defined function).
+    /// - `input` must be a valid and initialized DataChunkHandle.
+    /// - `output` must be a valid and writable WritableVector.
+    /// - Caller (DuckDB) must guarantee input and output are valid for the duration of the call.
+    unsafe fn invoke(
+        _state: &(),
+        input: &mut DataChunkHandle,
+        output: &mut dyn WritableVector,
+    ) -> Result<(), Box<dyn Error>> {
+        for i in 0..input.len() {
+            let input_vec = input.flat_vector(i);
+
+            // read input WKB blob
+            if let Some(blob) = input_vec
+                .as_slice_with_len::<duckdb_string_t>(input.len())
+                .first()
+            {
+                // decode hilbert geom
+                let hwkb = duckdb_string_bytes(blob);
+                let geom = (*SERIALIZER).decode(&hwkb)?;
+                let mut buf = vec![];
+                wkb::writer::write_geometry(
+                    &mut buf,
+                    &geom,
+                    &wkb::writer::WriteOptions::default(),
+                )?;
+
+                // write buf to output
+                let output_vector = output.flat_vector();
+                output_vector.insert(0, buf.as_slice());
+            }
+        }
+
+        Ok(())
+    }
+
+    fn signatures() -> Vec<ScalarFunctionSignature> {
+        vec![ScalarFunctionSignature::exact(
+            vec![LogicalTypeId::Blob.into()],
+            LogicalTypeId::Blob.into(),
+        )]
+    }
+}
 
 #[duckdb_entrypoint_c_api()]
 pub unsafe fn extension_entrypoint(con: Connection) -> Result<(), Box<dyn Error>> {
-    con.register_table_function::<HelloVTab>(EXTENSION_NAME)
-        .expect("Failed to register hello table function");
+    LazyCell::force(&SERIALIZER);
+
+    con.register_scalar_function::<HilbertGeometryEncodeFunc>("hg_encode")
+        .expect("Failed to register hg_encode() function");
+    con.register_scalar_function::<HilbertGeometryDecodeFunc>("hg_decode")
+        .expect("Failed to register hg_decode() function");
+
     Ok(())
 }

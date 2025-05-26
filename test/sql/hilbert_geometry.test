@@ -1,0 +1,26 @@
+# name: test/sql/hilbert_geometry.test
+# description: test hilbert_geometry extension
+# group: [quack]
+
+# Before we load the extension, this will fail
+statement error
+SELECT hg_encode('\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xF0?\x00\x00\x00\x00\x00\x00\xF0?'::blob);
+----
+Catalog Error: Scalar Function with name hg_encode does not exist!
+
+# Require statement will ensure the extension is loaded from now on
+require hilbert_geometry
+
+require icu
+
+# Try encoding
+query I
+SELECT hg_encode('\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xF0?\x00\x00\x00\x00\x00\x00\xF0?'::blob);
+----
+\x00\x1C\xC0\x9C7@\x1E\x1D?
+
+# Try decoding
+query I
+SELECT hg_decode('\x00\x1C\xC0\x9C7@\x1E\x1D?'::blob);
+----
+\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xF0?\x00\x00\x00\x00\x00\x00\xF0?
