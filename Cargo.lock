@@ -663,9 +663,9 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hilbert-geometry"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6eb3c76c3d9ddcbc060f23b400dcc6e44e00cbc5efcc9eba31a35286c656736"
+checksum = "d7fe1592ae366b6454c1a8edf532827e23fbd9e6f43ee58aa33d676f427fc3f1"
 dependencies = [
  "bincode",
  "geo-types",

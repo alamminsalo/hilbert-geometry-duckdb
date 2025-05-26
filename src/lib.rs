@@ -36,23 +36,22 @@ impl VScalar for HilbertGeometryEncodeFunc {
         input: &mut DataChunkHandle,
         output: &mut dyn WritableVector,
     ) -> Result<(), Box<dyn Error>> {
-        for i in 0..input.len() {
-            let input_vec = input.flat_vector(i);
+        let input_vec = input.flat_vector(0);
 
-            // read input WKB blob
-            if let Some(blob) = input_vec
-                .as_slice_with_len::<duckdb_string_t>(input.len())
-                .first()
-            {
-                // encode hilbert geom
-                let wkb = duckdb_string_bytes(blob);
-                let geom: Geometry<f64> = wkb::reader::read_wkb(wkb)?.to_geometry();
-                let buf = (*SERIALIZER).encode(&geom)?;
+        // read input WKB blob
+        for (idx, blob) in input_vec
+            .as_slice_with_len::<duckdb_string_t>(input.len())
+            .iter()
+            .enumerate()
+        {
+            // encode hilbert geom
+            let wkb = duckdb_string_bytes(blob);
+            let geom: Geometry<f64> = wkb::reader::read_wkb(wkb)?.to_geometry();
+            let buf = (*SERIALIZER).encode(&geom)?;
 
-                // write buf to output
-                let output_vector = output.flat_vector();
-                output_vector.insert(0, buf.as_slice());
-            }
+            // write buf to output
+            let output_vector = output.flat_vector();
+            output_vector.insert(idx, buf.as_slice());
         }
 
         Ok(())
@@ -75,28 +74,23 @@ impl VScalar for HilbertGeometryDecodeFunc {
         input: &mut DataChunkHandle,
         output: &mut dyn WritableVector,
     ) -> Result<(), Box<dyn Error>> {
-        for i in 0..input.len() {
-            let input_vec = input.flat_vector(i);
+        let input_vec = input.flat_vector(0);
 
-            // read input WKB blob
-            if let Some(blob) = input_vec
-                .as_slice_with_len::<duckdb_string_t>(input.len())
-                .first()
-            {
-                // decode hilbert geom
-                let hwkb = duckdb_string_bytes(blob);
-                let geom = (*SERIALIZER).decode(&hwkb)?;
-                let mut buf = vec![];
-                wkb::writer::write_geometry(
-                    &mut buf,
-                    &geom,
-                    &wkb::writer::WriteOptions::default(),
-                )?;
+        // read input WKB blob
+        for (idx, blob) in input_vec
+            .as_slice_with_len::<duckdb_string_t>(input.len())
+            .iter()
+            .enumerate()
+        {
+            // decode hilbert geom
+            let hwkb = duckdb_string_bytes(blob);
+            let geom = (*SERIALIZER).decode(&hwkb)?;
+            let mut buf = vec![];
+            wkb::writer::write_geometry(&mut buf, &geom, &wkb::writer::WriteOptions::default())?;
 
-                // write buf to output
-                let output_vector = output.flat_vector();
-                output_vector.insert(0, buf.as_slice());
-            }
+            // write buf to output
+            let output_vector = output.flat_vector();
+            output_vector.insert(idx, buf.as_slice());
         }
 
         Ok(())
