@@ -688,7 +688,6 @@ dependencies = [
  "geo-types",
  "hilbert-geometry",
  "libduckdb-sys",
- "once_cell",
  "wkb",
 ]
 
