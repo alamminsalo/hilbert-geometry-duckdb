@@ -15,9 +15,11 @@ load 'hilbert_geometry';
 
 -- Encode Geometry -> WKB -> HWKB
 SELECT st_aswkb('POINT(1 1)'::geometry).hg_encode();
+-- \x00\x1C\xC0\x9C7@\x1E\x1D?
 
 -- Decode HWKB -> WKB -> Geometry
 SELECT hg_decode('\x00\x1C\xC0\x9C7@\x1E\x1D?'::blob).st_geomfromwkb();
+-- POINT (1 1)
 ```
 
 ## Building
