@@ -37,6 +37,8 @@ du -sh test/sql/*.parquet
 # 3.6M    test/sql/osm_wkb.parquet
 ```
 
+We see ~60% reduction in size compared to WKB geometries.
+
 ## Building
 
 See instructions at [duckdb/extension-template-rs](https://github.com/duckdb/extension-template-rs)
