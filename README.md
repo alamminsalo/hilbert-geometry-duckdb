@@ -13,10 +13,10 @@ Creates the following functions:
 load spatial;
 load 'hilbert_geometry';
 
--- Encode WKB geometry to binary-encoded hilbert geometry
+-- Encode Geometry -> WKB -> HWKB
 SELECT st_aswkb('POINT(1 1)'::geometry).hg_encode();
 
--- Decode hilbert-encoded geometry to WKB and parse Geometry
+-- Decode HWKB -> WKB -> Geometry
 SELECT hg_decode('\x00\x1C\xC0\x9C7@\x1E\x1D?'::blob).st_geomfromwkb();
 ```
 
