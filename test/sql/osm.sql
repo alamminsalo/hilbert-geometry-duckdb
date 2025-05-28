@@ -21,3 +21,8 @@ CREATE TABLE data AS
 .print 'Creating parquet files...'
 copy data to 'test/sql/osm_wkb.parquet';
 copy (select geometry.st_aswkb().hg_encode() as hg from data) to 'test/sql/osm_hwkb.parquet';
+
+.print 'Calculate average loss...'
+select
+    avg(st_distance(geometry, geometry.st_aswkb().hg_encode().hg_decode().st_geomfromwkb())) as avg_loss
+    from data;
